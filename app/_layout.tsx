@@ -1,42 +1,40 @@
-// app/_layout.tsx
 import React, { useEffect, useContext } from 'react';
-import { Slot, useRouter, useSegments } from 'expo-router';
-import { AuthContext, AuthProvider } from '../context/AuthContext';
-import { ActivityIndicator, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Slot, useRouter, useSegments, SplashScreen } from 'expo-router';
+import { AuthContext, AuthProvider, AuthContextType } from '../context/AuthContext';
+
+SplashScreen.preventAutoHideAsync();
 
 function InitialLayout() {
-  const { isAuthenticated, userRole, isLoading } = useContext(AuthContext);
+  const { isAuthenticated, userRole, isLoading } = useContext(AuthContext) as AuthContextType;
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading) {
+      return;
+    }
+
+    SplashScreen.hideAsync();
 
     const inAuthGroup = segments[0] === '(auth)';
 
     if (isAuthenticated) {
+
       if (inAuthGroup) {
         if (userRole === 'paramedic') {
-          router.replace('/(tabs)/(paramedic)/dashboard');
+          router.replace('/paramedic-dashboard'); 
         } else if (userRole === 'hospital') {
-          router.replace('/(tabs)/(hospital)/dashboard');
+          router.replace('/hospital-dashboard');
         }
       }
     } else {
+
       if (!inAuthGroup) {
         router.replace(userRole ? '/login' : '/select-role');
       }
     }
   }, [isAuthenticated, userRole, isLoading, segments]);
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
 
   return <Slot />;
 }

@@ -1,4 +1,3 @@
-// constants/mapStyles.ts
 export const mapStyleLight = [
     {
       "featureType": "poi.business",

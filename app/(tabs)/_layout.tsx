@@ -1,28 +1,50 @@
-// app/(tabs)/_layout.tsx
 import React, { useContext } from 'react';
-import { Tabs } from 'expo-router';
-import { AuthContext } from '../../context/AuthContext';
-import { FontAwesome } from '@expo/vector-icons';
+import { Tabs, Redirect } from 'expo-router';
+import { AuthContext, AuthContextType } from '../../context/AuthContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Colors from '../../constants/Colors';
 
 export default function TabsLayout() {
-  const { userRole } = useContext(AuthContext);
+  const { userRole, isAuthenticated } = useContext(AuthContext) as AuthContextType;
+    if (!isAuthenticated) {
+    return <Redirect href="/login" />;
+  }
 
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: '#007AFF', headerShown: false }}>
+    <Tabs
+      screenOptions={({ route }) => ({
+        tabBarActiveTintColor: userRole === 'paramedic' ? Colors.roles.paramedic : Colors.roles.hospital,
+        headerShown: false,
+      })}
+    >
       <Tabs.Screen
-        name="(paramedic)"
+        name="paramedic-dashboard"
         options={{
-          title: 'واجهة المسعف',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="medkit" color={color} />,
-          href: userRole === 'paramedic' ? '/(tabs)/(paramedic)/dashboard' : null,
+          title: 'الخريطة',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="map-marker-outline" size={size} color={color} />
+          ),
+          href: userRole === 'paramedic' ? '/paramedic-dashboard' : null,
         }}
       />
       <Tabs.Screen
-        name="(hospital)"
+        name="add-case"
         options={{
-          title: 'واجهة المستشفى',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="hospital-o" color={color} />,
-          href: userRole === 'hospital' ? '/(tabs)/(hospital)/dashboard' : null,
+          title: 'إضافة حالة',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="plus-box-outline" size={size} color={color} />
+          ),
+          href: userRole === 'paramedic' ? '/add-case' : null,
+        }}
+      />
+      <Tabs.Screen
+        name="hospital-dashboard"
+        options={{
+          title: 'لوحة التحكم',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="hospital-building" size={size} color={color} />
+          ),
+          href: userRole === 'hospital' ? '/hospital-dashboard' : null,
         }}
       />
     </Tabs>

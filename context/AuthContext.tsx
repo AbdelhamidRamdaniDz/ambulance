@@ -1,4 +1,3 @@
-// context/AuthContext.tsx
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -23,13 +22,11 @@ export const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
-// 3. تعريف نوع الـ props للـ Provider
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  // 4. إعطاء نوع صريح للحالة (State)
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);

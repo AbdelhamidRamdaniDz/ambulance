@@ -1,4 +1,3 @@
-// app/(tabs)/(paramedic)/dashboard.tsx
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -8,18 +7,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { AuthContext } from '../../../context/AuthContext';
+import { AuthContext } from '../../context/AuthContext';
 import { Stack } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { mapStyleDark, mapStyleLight } from '../../constants/mapStyles';
+import { COLORS, SIZES, FONTS } from '../../constants/theme';
 
-// استيراد تصميم الخرائط المخصص
-import { mapStyleDark, mapStyleLight } from '../../../constants/mapStyles';
-
-// تعريف الأنواع (Types)
 type HospitalStatus = 'available' | 'limited' | 'unavailable';
 type Hospital = {
   id: number;
@@ -29,32 +26,24 @@ type Hospital = {
   status: HospitalStatus;
 };
 
-// بيانات المستشفيات
-const hospitals: Hospital[] = [
-  { id: 1, name: 'مستشفى الجلفة المركزي', lat: 34.673, lng: 3.263, status: 'available' },
-  { id: 2, name: 'مستشفى طب العيون', lat: 34.665, lng: 3.255, status: 'limited' },
-  { id: 3, name: 'مستشفى الأم والطفل', lat: 34.68, lng: 3.27, status: 'unavailable' },
+const hospitalsData: Hospital[] = [
+    { id: 1, name: 'مستشفى الجلفة المركزي', lat: 34.673, lng: 3.263, status: 'available' },
+    { id: 2, name: 'مستشفى طب العيون', lat: 34.665, lng: 3.255, status: 'limited' },
+    { id: 3, name: 'مستشفى الأم والطفل', lat: 34.68, lng: 3.27, status: 'unavailable' },
 ];
 
-const STATUS_COLORS = {
-  available: '#30d158',
-  limited: '#ff9f0a',
-  unavailable: '#ff453a',
-};
-
-// --- المكون الرئيسي ---
 export default function ParamedicDashboard() {
   const { logout } = useContext(AuthContext);
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
+  const theme = COLORS[colorScheme || 'light'];
+  const insets = useSafeAreaInsets();
 
-  // 1. حالات جديدة للموقع والتحميل والمستشفى المختار
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
   const mapRef = useRef<MapView>(null);
 
-  // 2. طلب إذن الموقع عند تحميل الشاشة
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -71,12 +60,11 @@ export default function ParamedicDashboard() {
     try {
       const currentLocation = await Location.getCurrentPositionAsync({});
       setLocation(currentLocation);
-      setIsLoading(false);
-      // تحديث الخريطة لتتمركز حول الموقع الجديد
+      if (isLoading) setIsLoading(false);
       animateToLocation(currentLocation.coords.latitude, currentLocation.coords.longitude);
     } catch (error) {
-      Alert.alert("خطأ", "لم نتمكن من تحديد موقعك الحالي.");
-      setIsLoading(false);
+      Alert.alert('خطأ', 'لم نتمكن من تحديد موقعك الحالي.');
+      if (isLoading) setIsLoading(false);
     }
   };
 
@@ -88,27 +76,27 @@ export default function ParamedicDashboard() {
       longitudeDelta: 0.05,
     }, 1000);
   };
-  
-  // شاشة التحميل
+
   if (isLoading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: isDarkMode ? '#000' : '#f0f2f5' }]}>
-        <ActivityIndicator size="large" color={isDarkMode ? '#FFF' : '#007AFF'} />
-        <Text style={[styles.loadingText, { color: isDarkMode ? '#FFF' : '#000' }]}>جارٍ تحديد موقعك...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={COLORS.roles.paramedic} />
+        <Text style={[styles.loadingText, { color: theme.text }]}>جارٍ تحديد موقعك...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen
         options={{
+          headerShown: true,
           title: 'خريطة الطوارئ',
-          headerStyle: { backgroundColor: isDarkMode ? '#1c1c1e' : '#ffffff' },
-          headerTitleStyle: { color: isDarkMode ? '#FFF' : '#000' },
+          headerStyle: { backgroundColor: theme.card },
+          headerTitleStyle: { color: theme.text, ...FONTS.title },
           headerRight: () => (
-            <TouchableOpacity onPress={logout} style={{ paddingHorizontal: 15 }}>
-              <Text style={{ color: STATUS_COLORS.unavailable, fontSize: 16, fontWeight: 'bold' }}>خروج</Text>
+            <TouchableOpacity onPress={logout} style={{ paddingHorizontal: SIZES.padding / 1.5 }}>
+              <Text style={{ color: COLORS.status.unavailable, ...FONTS.h3, fontWeight: 'bold' }}>خروج</Text>
             </TouchableOpacity>
           ),
         }}
@@ -123,74 +111,61 @@ export default function ParamedicDashboard() {
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}
-        onPress={() => setSelectedHospital(null)} // إخفاء البطاقة عند الضغط على الخريطة
+        onPress={() => setSelectedHospital(null)}
       >
-        {/* مؤشر موقع المسعف */}
         {location && (
           <Marker coordinate={location.coords} title="موقعي الحالي">
             <View style={styles.myLocationMarker} />
           </Marker>
         )}
-
-        {/* مؤشرات المستشفيات */}
-        {hospitals.map((hospital) => (
+        {hospitalsData.map((hospital) => (
           <Marker
             key={hospital.id}
             coordinate={{ latitude: hospital.lat, longitude: hospital.lng }}
             title={hospital.name}
-            onPress={() => setSelectedHospital(hospital)} // إظهار البطاقة عند الضغط
+            onPress={(e) => { e.stopPropagation(); setSelectedHospital(hospital); }}
           >
-            <View style={[styles.markerContainer, { backgroundColor: STATUS_COLORS[hospital.status] }]}>
+            <View style={[styles.markerContainer, { backgroundColor: COLORS.status[hospital.status] }]}>
               <MaterialCommunityIcons name="hospital-box" size={24} color="white" />
             </View>
           </Marker>
         ))}
       </MapView>
-      
-      {/* 3. بطاقة تفاصيل المستشفى (تظهر عند الاختيار) */}
+
       {selectedHospital && (
-        <View style={[styles.bottomSheet, { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }]}>
-          <Text style={[styles.hospitalName, {color: isDarkMode ? '#fff' : '#000'}]}>{selectedHospital.name}</Text>
-          <View style={[styles.statusBadge, {backgroundColor: STATUS_COLORS[selectedHospital.status]}]}>
-             <Text style={styles.statusBadgeText}>{selectedHospital.status}</Text>
+        <View style={[styles.bottomSheet, { backgroundColor: theme.card, paddingBottom: insets.bottom + SIZES.base }]}>
+          <Text style={[styles.hospitalName, { color: theme.text }]}>{selectedHospital.name}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: COLORS.status[selectedHospital.status] }]}>
+            <Text style={styles.statusBadgeText}>{selectedHospital.status}</Text>
           </View>
-          <TouchableOpacity 
-            style={[styles.alertButton, {backgroundColor: selectedHospital.status === 'available' ? '#007AFF' : 'gray'}]}
+          <TouchableOpacity
+            style={[styles.alertButton, { backgroundColor: selectedHospital.status === 'available' ? COLORS.roles.paramedic : 'gray' }]}
             disabled={selectedHospital.status !== 'available'}
-            onPress={() => Alert.alert("إرسال تنبيه", `تم إرسال تنبيه إلى ${selectedHospital.name}`)}
+            onPress={() => Alert.alert('إرسال تنبيه', `تم إرسال تنبيه إلى ${selectedHospital.name}`)}
           >
-            <MaterialCommunityIcons name="bell-ring" size={20} color="white" style={{marginRight: 8}}/>
+            <MaterialCommunityIcons name="bell-ring" size={20} color="white" style={{ marginRight: SIZES.base }} />
             <Text style={styles.alertButtonText}>إرسال تنبيه الآن</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={fetchLocation}>
+      <TouchableOpacity style={[styles.recenterFab, { bottom: (selectedHospital ? 170 : 0) + insets.bottom + SIZES.base * 2 }]} onPress={fetchLocation}>
         <MaterialCommunityIcons name="crosshairs-gps" size={24} color="white" />
       </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 }
 
-
-// --- الأنماط المحسّنة ---
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { width: '100%', height: '100%' },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { ...FONTS.body, marginTop: SIZES.base * 1.5, color: '#000' },
   myLocationMarker: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(0, 122, 255, 0.9)',
+    backgroundColor: COLORS.roles.paramedic,
     borderWidth: 3,
     borderColor: 'white',
     shadowColor: '#000',
@@ -200,24 +175,18 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   markerContainer: {
-    padding: 8,
+    padding: SIZES.base,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
   },
-  fab: {
+  recenterFab: {
     position: 'absolute',
-    bottom: 120,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#007AFF',
+    right: SIZES.padding,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.roles.paramedic,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
@@ -229,42 +198,41 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
-    paddingTop: 15,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    padding: SIZES.padding,
+    borderTopLeftRadius: SIZES.radius * 2,
+    borderTopRightRadius: SIZES.radius * 2,
     elevation: 10,
     shadowColor: '#000',
     shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: -2 },
   },
   hospitalName: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    ...FONTS.h2,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: SIZES.base,
   },
   statusBadge: {
     alignSelf: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-    borderRadius: 15,
-    marginBottom: 15,
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: SIZES.base / 2,
+    borderRadius: SIZES.radius,
+    marginBottom: SIZES.padding / 1.5,
   },
   statusBadgeText: {
     color: 'white',
+    ...FONTS.caption,
     fontWeight: 'bold',
-    textTransform: 'uppercase',
+    textTransform: 'capitalize',
   },
   alertButton: {
-    padding: 15,
-    borderRadius: 12,
+    padding: SIZES.padding / 1.5,
+    borderRadius: SIZES.radius,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
   alertButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...FONTS.h3,
   },
 });
