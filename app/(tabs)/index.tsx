@@ -1,3 +1,4 @@
+// app/(tabs)/index.tsx
 import { StyleSheet } from 'react-native';
 
 import EditScreenInfo from '@/components/EditScreenInfo';
