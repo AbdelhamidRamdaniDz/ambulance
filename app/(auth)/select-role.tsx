@@ -14,13 +14,16 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SIZES, FONTS } from '../../constants/theme';
 
 const AppLogo = ({ size }: { size: number }) => (
-    <View style={styles.logoContainer}>
-      <Image
-        source={require('../../assets/images/Ambo.png')}
-        style={{ width: size, height: size, resizeMode: 'contain' }}
-      />
-    </View>
-  );
+  <View style={styles.logoContainer}>
+    <Image
+      source={require('../../assets/images/splash-icon.png')}
+      style={{ width: size, height: size, resizeMode: 'contain' }}
+    />
+    <Text style={[FONTS.body, { color: COLORS.light.textSecondary, marginTop: SIZES.base }]}>
+      نظام الاستجابة الطارئة
+    </Text>
+  </View>
+);
 
 export default function SelectRoleScreen() {
   const { setRole } = useContext(AuthContext) as AuthContextType;
@@ -30,7 +33,7 @@ export default function SelectRoleScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: uiTheme.background }]}>
       <StatusBar barStyle={useColorScheme() === 'dark' ? 'light-content' : 'dark-content'} />
       <View style={styles.container}>
-        <AppLogo color={COLORS.roles.paramedic} size={120} />
+        <AppLogo size={120} />
 
         <Text style={[styles.title, { color: uiTheme.text }]}>اختر دورك للبدء</Text>
 
@@ -42,6 +45,7 @@ export default function SelectRoleScreen() {
             <MaterialCommunityIcons name="ambulance" size={40} color="white" />
             <Text style={styles.buttonText}>مسعف</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.button, { backgroundColor: COLORS.roles.hospital }]}
             onPress={() => setRole('hospital')}

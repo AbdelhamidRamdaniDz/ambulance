@@ -24,7 +24,7 @@ import { COLORS, SIZES, FONTS } from '../../constants/theme';
 const AppLogo = ({ size }: { size: number }) => (
   <View style={styles.logoContainer}>
     <Image
-      source={require('../../assets/images/Ambo.png')}
+      source={require('../../assets/images/splash-icon.png')}
       style={{ width: size, height: size, resizeMode: 'contain' }}
     />
   </View>

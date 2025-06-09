@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { AuthContext } from '../../context/AuthContext';
@@ -45,6 +46,7 @@ export default function ParamedicDashboard() {
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
+    // هذا الكود يطلب إذن الموقع عند تحميل الشاشة
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -58,22 +60,22 @@ export default function ParamedicDashboard() {
 
   const fetchLocation = async () => {
     try {
-      const currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation(currentLocation);
-      if (isLoading) setIsLoading(false);
-      animateToLocation(currentLocation.coords.latitude, currentLocation.coords.longitude);
+        const currentLocation = await Location.getCurrentPositionAsync({});
+        setLocation(currentLocation);
+        if(isLoading) setIsLoading(false);
+        animateToLocation(currentLocation.coords.latitude, currentLocation.coords.longitude);
     } catch (error) {
-      Alert.alert('خطأ', 'لم نتمكن من تحديد موقعك الحالي.');
-      if (isLoading) setIsLoading(false);
+        Alert.alert("خطأ", "لم نتمكن من تحديد موقعك الحالي.");
+        if(isLoading) setIsLoading(false);
     }
   };
 
   const animateToLocation = (latitude: number, longitude: number) => {
     mapRef.current?.animateToRegion({
-      latitude,
-      longitude,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05,
+        latitude,
+        longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
     }, 1000);
   };
 
@@ -87,6 +89,7 @@ export default function ParamedicDashboard() {
   }
 
   return (
+    // استخدام View عادي هنا لأن SafeAreaView ستُطبق على العناصر الداخلية
     <View style={styles.container}>
       <Stack.Screen
         options={{
@@ -106,10 +109,10 @@ export default function ParamedicDashboard() {
         style={styles.map}
         customMapStyle={isDarkMode ? mapStyleDark : mapStyleLight}
         initialRegion={{
-          latitude: location?.coords.latitude || 34.673,
-          longitude: location?.coords.longitude || 3.263,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
+            latitude: location?.coords.latitude || 34.673,
+            longitude: location?.coords.longitude || 3.263,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
         }}
         onPress={() => setSelectedHospital(null)}
       >
@@ -134,18 +137,18 @@ export default function ParamedicDashboard() {
 
       {selectedHospital && (
         <View style={[styles.bottomSheet, { backgroundColor: theme.card, paddingBottom: insets.bottom + SIZES.base }]}>
-          <Text style={[styles.hospitalName, { color: theme.text }]}>{selectedHospital.name}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: COLORS.status[selectedHospital.status] }]}>
-            <Text style={styles.statusBadgeText}>{selectedHospital.status}</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.alertButton, { backgroundColor: selectedHospital.status === 'available' ? COLORS.roles.paramedic : 'gray' }]}
-            disabled={selectedHospital.status !== 'available'}
-            onPress={() => Alert.alert('إرسال تنبيه', `تم إرسال تنبيه إلى ${selectedHospital.name}`)}
-          >
-            <MaterialCommunityIcons name="bell-ring" size={20} color="white" style={{ marginRight: SIZES.base }} />
-            <Text style={styles.alertButtonText}>إرسال تنبيه الآن</Text>
-          </TouchableOpacity>
+           <Text style={[styles.hospitalName, { color: theme.text }]}>{selectedHospital.name}</Text>
+           <View style={[styles.statusBadge, { backgroundColor: COLORS.status[selectedHospital.status] }]}>
+             <Text style={styles.statusBadgeText}>{selectedHospital.status}</Text>
+           </View>
+           <TouchableOpacity
+             style={[styles.alertButton, { backgroundColor: selectedHospital.status === 'available' ? COLORS.roles.paramedic : 'gray' }]}
+             disabled={selectedHospital.status !== 'available'}
+             onPress={() => Alert.alert('إرسال تنبيه', `تم إرسال تنبيه إلى ${selectedHospital.name}`)}
+           >
+             <MaterialCommunityIcons name="bell-ring" size={20} color="white" style={{ marginRight: SIZES.base }} />
+             <Text style={styles.alertButtonText}>إرسال تنبيه الآن</Text>
+           </TouchableOpacity>
         </View>
       )}
 
@@ -160,7 +163,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { width: '100%', height: '100%' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { ...FONTS.body, marginTop: SIZES.base * 1.5, color: '#000' },
+  loadingText: { ...FONTS.body, marginTop: SIZES.base * 1.5 },
   myLocationMarker: {
     width: 24,
     height: 24,
