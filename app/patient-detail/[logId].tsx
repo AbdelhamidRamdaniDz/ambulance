@@ -6,18 +6,19 @@ import {
   SafeAreaView,
   useColorScheme,
   ScrollView,
-  TouchableOpacity,
   Dimensions,
   Animated,
+  Platform,
+  Pressable,
+  Linking,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SIZES, FONTS, SHADOWS } from '../../constants/theme';
 import { mockLogData } from '../../data/mock';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get('window');
 
-// Responsive breakpoints
 const getDeviceType = () => {
   if (screenWidth < 768) return 'mobile';
   if (screenWidth < 1024) return 'tablet';
@@ -26,9 +27,7 @@ const getDeviceType = () => {
 
 const isSmallDevice = screenWidth < 360;
 const isMediumDevice = screenWidth >= 360 && screenWidth < 768;
-const isLargeDevice = screenWidth >= 768;
 
-// Responsive values helpers for styles
 const getResponsiveValue = (small: number, medium: number, large: number) => {
   if (isSmallDevice) return small;
   if (isMediumDevice) return medium;
@@ -37,27 +36,100 @@ const getResponsiveValue = (small: number, medium: number, large: number) => {
 
 const responsivePadding = getResponsiveValue(SIZES.padding * 0.8, SIZES.padding, SIZES.padding * 1.2);
 
+function generatePatientReportHTML(patient: any) {
+  return `
+    <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8" />
+        <title>تقرير المريض</title>
+        <style>
+          body { font-family: Tahoma, Arial, sans-serif; background: #f8f8f8; color: #222; padding: 32px; }
+          .header { background: #${COLORS.roles.paramedic.replace('#','')}; color: #fff; border-radius: 16px; padding: 24px 32px; margin-bottom: 32px; }
+          .header h1 { margin: 0 0 8px 0; font-size: 2em; }
+          .header .status { font-size: 1.1em; margin-bottom: 4px; }
+          .section { background: #fff; border-radius: 12px; margin-bottom: 24px; padding: 20px 28px; box-shadow: 0 2px 8px #0001; }
+          .section h2 { margin-top: 0; font-size: 1.2em; color: #${COLORS.roles.paramedic.replace('#','')}; }
+          .row { margin-bottom: 10px; }
+          .label { color: #888; font-weight: bold; min-width: 120px; display: inline-block; }
+          .value { color: #222; }
+          .notes { background: #f3f9f3; border-right: 4px solid #${COLORS.accent.success.replace('#','')}; padding: 16px; border-radius: 8px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${patient.patientName}</h1>
+          <div class="status">${patient.status === 'completed' ? 'تمت المعالجة' : 'قيد المعالجة'}</div>
+          <div class="id">#${patient.id}</div>
+        </div>
+        <div class="section">
+          <h2>المعلومات الطبية</h2>
+          <div class="row"><span class="label">الحالة الأولية:</span> <span class="value">${patient.condition}</span></div>
+          <div class="row"><span class="label">زمرة الدم:</span> <span class="value">${patient.bloodType}</span></div>
+        </div>
+        <div class="section">
+          <h2>الجدول الزمني</h2>
+          <div class="row"><span class="label">تاريخ الدخول:</span> <span class="value">${patient.entryDate}</span></div>
+          <div class="row"><span class="label">تاريخ الخروج:</span> <span class="value">${patient.dischargeDate}</span></div>
+          <div class="row"><span class="label">المستشفى المحول إليه:</span> <span class="value">${patient.assignedHospital}</span></div>
+        </div>
+        <div class="section">
+          <h2>التقرير الطبي</h2>
+          <div class="notes">${patient.detailedNotes || ''}</div>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+function printPatientReport(patient: any) {
+  // Only attempt to use window.open if it exists (i.e., on web)
+  if (typeof window !== 'undefined' && typeof window.open === 'function') {
+    const html = generatePatientReportHTML(patient);
+    const printWindow = window.open('', '_blank', 'width=900,height=900');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    } else {
+      alert('تعذر فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.');
+    }
+  } else {
+    alert('ميزة الطباعة غير متوفرة حالياً على هذا الجهاز.');
+  }
+}
+
+function downloadPatientPDF(patient: any) {
+  printPatientReport(patient);
+}
+
 export default function PatientDetailScreen() {
   const { logId } = useLocalSearchParams<{ logId: string }>();
   const colorScheme = useColorScheme();
   const theme = COLORS[colorScheme || 'light'];
-  const shadows = SHADOWS[colorScheme || 'light'];
   const router = useRouter();
-  
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const deviceType = getDeviceType();
+  const headerAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       setDimensions(window);
     });
+    Animated.timing(headerAnim, {
+      toValue: 1,
+      duration: 650,
+      useNativeDriver: true,
+      easing: (t) => t * t * (3 - 2 * t),
+    }).start();
     return () => subscription?.remove();
   }, []);
 
   const patient = mockLogData.find((p) => p.id === logId);
 
-  // Responsive values
-  // (getResponsiveValue and responsivePadding are now defined outside for use in styles)
   const responsiveFontSize = {
     h1: getResponsiveValue(SIZES.h1 - 6, SIZES.h1 - 2, SIZES.h1),
     h3: getResponsiveValue(SIZES.h3 - 2, SIZES.h3, SIZES.h3 + 2),
@@ -67,7 +139,7 @@ export default function PatientDetailScreen() {
   if (!patient) {
     return (
       <SafeAreaView style={[styles.containerCenter, { backgroundColor: theme.background }]}>
-        <View style={[styles.notFoundContainer, { backgroundColor: theme.card }, shadows.medium]}>
+        <View style={[styles.notFoundContainer, { backgroundColor: theme.card }]}>
           <MaterialCommunityIcons name="account-search" size={80} color={theme.textSecondary} />
           <Text style={[FONTS.h2, { color: theme.text, marginTop: SIZES.padding, textAlign: 'center' }]}>
             لم يتم العثور على المريض
@@ -75,33 +147,21 @@ export default function PatientDetailScreen() {
           <Text style={[FONTS.body, { color: theme.textSecondary, marginTop: SIZES.base, textAlign: 'center' }]}>
             يبدو أن المريض المطلوب غير موجود في السجلات
           </Text>
-          <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={[styles.backButton, { backgroundColor: COLORS.roles.paramedic }, shadows.small]}
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [
+              styles.backButton,
+              { backgroundColor: COLORS.roles.paramedic, opacity: pressed ? 0.8 : 1 },
+            ]}
+            android_ripple={{ color: COLORS.roles.paramedicLight }}
           >
             <MaterialCommunityIcons name="arrow-right" size={20} color="white" />
             <Text style={styles.backButtonText}>الرجوع</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
   }
-
-  const renderDetailRow = (label: string, value: string, icon?: keyof typeof MaterialCommunityIcons.glyphMap) => (
-    <View style={[styles.detailRow, { borderBottomColor: theme.borderLight }]}>
-      <View style={styles.detailContent}>
-        <Text style={[styles.detailValue, { color: theme.text }]}>{value}</Text>
-        <View style={styles.labelContainer}>
-          {icon && (
-            <View style={[styles.iconContainer, { backgroundColor: COLORS.roles.paramedicLight }]}>
-              <MaterialCommunityIcons name={icon} size={16} color={COLORS.roles.paramedic} />
-            </View>
-          )}
-          <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>{label}</Text>
-        </View>
-      </View>
-    </View>
-  );
 
   const getStatusColor = (status: string) => {
     return status === 'completed' ? COLORS.status.available : COLORS.status.limited;
@@ -113,6 +173,13 @@ export default function PatientDetailScreen() {
 
   const getStatusIcon = (status: string) => {
     return status === 'completed' ? "check-circle" : "clock-outline";
+  };
+
+  const handleEmergencyCall = () => {
+    const emergencyNumber = '112';
+    Linking.openURL(`tel:${emergencyNumber}`).catch(() => {
+      alert(`يرجى الاتصال على ${emergencyNumber}`);
+    });
   };
 
   return (
@@ -127,247 +194,409 @@ export default function PatientDetailScreen() {
           headerShadowVisible: false,
         }}
       />
-      
-      <ScrollView 
+
+      <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerCardContainer}>
+        <Animated.View
+          style={[
+            styles.headerCardContainer,
+            {
+              opacity: headerAnim,
+              transform: [
+                {
+                  translateY: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [40, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           <View
-            style={[styles.headerCard, { backgroundColor: getStatusColor(patient.status) }, shadows.large]}
+            style={[
+              styles.headerCard,
+              { backgroundColor: getStatusColor(patient.status) },
+            ]}
           >
             <View style={styles.headerContent}>
               <View style={styles.patientInfo}>
                 <Text style={styles.patientName}>{patient.patientName}</Text>
                 <View style={styles.statusContainer}>
-                  <MaterialCommunityIcons 
-                    name={getStatusIcon(patient.status)}
-                    size={18} 
-                    color="white" 
-                  />
                   <Text style={styles.statusText}>{getStatusText(patient.status)}</Text>
+                  <MaterialCommunityIcons
+                    name={getStatusIcon(patient.status)}
+                    size={18}
+                    color="white"
+                  />
                 </View>
                 <Text style={styles.patientId}>#{patient.id}</Text>
               </View>
-              <View style={styles.patientAvatar}>
+              <Animated.View
+                style={{
+                  ...styles.patientAvatar,
+                  transform: [
+                    {
+                      scale: headerAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.8, 1],
+                      }),
+                    },
+                  ],
+                  shadowOpacity: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.1, 0.25],
+                  }),
+                }}
+              >
                 <MaterialCommunityIcons name="account" size={36} color="white" />
-              </View>
+              </Animated.View>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         <View
           style={[
             styles.quickStatsContainer,
             { marginTop: 16 },
             deviceType === 'tablet' && styles.quickStatsTablet,
-            deviceType === 'desktop' && styles.quickStatsDesktop
+            deviceType === 'desktop' && styles.quickStatsDesktop,
           ]}
         >
-          <View style={[styles.quickStatCard, { backgroundColor: theme.card }, shadows.medium]}>
-            <View style={[
-              styles.quickStatIcon, 
-              { backgroundColor: '#FFE5E5' },
-              isSmallDevice && styles.quickStatIconSmall
-            ]}>
-              <MaterialCommunityIcons 
-                name="water-opacity" 
-                size={getResponsiveValue(20, 24, 28)} 
-                color="#E74C3C" 
+          <Animated.View
+            style={{
+              ...styles.quickStatCard,
+              backgroundColor: theme.card,
+              opacity: headerAnim,
+              transform: [
+                {
+                  translateY: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [30, 0],
+                  }),
+                },
+              ],
+            }}
+          >
+            <View
+              style={[
+                styles.quickStatIcon,
+                { backgroundColor: '#FFE5E5' },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="water-opacity"
+                size={getResponsiveValue(20, 24, 28)}
+                color="#E74C3C"
               />
             </View>
-            <Text style={[
-              styles.quickStatValue, 
-              { color: theme.text, fontSize: responsiveFontSize.h3 }
-            ]}>
+            <Text
+              style={[
+                styles.quickStatValue,
+                { color: theme.text, fontSize: responsiveFontSize.h3 },
+              ]}
+            >
               {patient.bloodType}
             </Text>
             <Text style={[styles.quickStatLabel, { color: theme.textSecondary }]}>زمرة الدم</Text>
-          </View>
-          <View style={[styles.quickStatCard, { backgroundColor: theme.card }, shadows.medium]}>
-            <View style={[
-              styles.quickStatIcon, 
-              { backgroundColor: '#E3F2FD' },
-              isSmallDevice && styles.quickStatIconSmall
-            ]}>
-              <MaterialCommunityIcons 
-                name="hospital-building" 
-                size={getResponsiveValue(20, 24, 28)} 
-                color="#3498DB" 
+          </Animated.View>
+          <Animated.View
+            style={{
+              ...styles.quickStatCard,
+              backgroundColor: theme.card,
+              opacity: headerAnim,
+              transform: [
+                {
+                  translateY: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [30, 0],
+                  }),
+                },
+              ],
+            }}
+          >
+            <View
+              style={[
+                styles.quickStatIcon,
+                { backgroundColor: '#E3F2FD' },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="hospital-building"
+                size={getResponsiveValue(20, 24, 28)}
+                color="#3498DB"
               />
             </View>
-            <Text style={[
-              styles.quickStatValue, 
-              { color: theme.text, fontSize: responsiveFontSize.body }
-            ]} numberOfLines={isSmallDevice ? 3 : 2}>
+            <Text
+              style={[
+                styles.quickStatValue,
+                { color: theme.text, fontSize: responsiveFontSize.body },
+              ]}
+              numberOfLines={isSmallDevice ? 3 : 2}
+            >
               {patient.assignedHospital}
             </Text>
             <Text style={[styles.quickStatLabel, { color: theme.textSecondary }]}>المستشفى</Text>
-          </View>
+          </Animated.View>
         </View>
 
-        {/* Medical Information with Enhanced Cards */}
-        <View style={[styles.sectionCard, { backgroundColor: theme.card }, shadows.medium]}>
+        <Animated.View
+          style={{
+            ...styles.sectionCard,
+            backgroundColor: theme.card,
+            opacity: headerAnim,
+            transform: [
+              {
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          }}
+        >
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconContainer, { backgroundColor: COLORS.roles.paramedicLight }]}>
               <MaterialCommunityIcons name="clipboard-pulse" size={24} color={COLORS.roles.paramedic} />
             </View>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>المعلومات الطبية</Text>
           </View>
-          {renderDetailRow("الحالة الأولية", patient.condition, "clipboard-pulse-outline")}
-          {renderDetailRow("زمرة الدم", patient.bloodType, "water-opacity")}
-        </View>
+          <View style={styles.medicalInfoContainer}>
+            <View style={styles.medicalInfoRow}>
+              <View style={styles.medicalInfoIconContainer}>
+                <MaterialCommunityIcons name="clipboard-pulse-outline" size={20} color={COLORS.roles.paramedic} />
+              </View>
+              <View style={styles.medicalInfoContent}>
+                <Text style={[styles.medicalInfoLabel, { color: theme.textSecondary }]}>الحالة الأولية</Text>
+                <Text style={[styles.medicalInfoValue, { color: theme.text }]}>{patient.condition}</Text>
+              </View>
+            </View>
+            <View style={styles.medicalInfoDivider} />
+            <View style={styles.medicalInfoRow}>
+              <View style={styles.medicalInfoIconContainer}>
+                <MaterialCommunityIcons name="water-opacity" size={20} color={COLORS.roles.paramedic} />
+              </View>
+              <View style={styles.medicalInfoContent}>
+                <Text style={[styles.medicalInfoLabel, { color: theme.textSecondary }]}>زمرة الدم</Text>
+                <Text style={[styles.medicalInfoValue, { color: theme.text }]}>{patient.bloodType}</Text>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
 
-        {/* Timeline Information */}
-        <View style={[styles.sectionCard, { backgroundColor: theme.card }, shadows.medium]}>
+        <Animated.View
+          style={{
+            ...styles.sectionCard,
+            backgroundColor: theme.card,
+            opacity: headerAnim,
+            transform: [
+              {
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [10, 0],
+                }),
+              },
+            ],
+          }}
+        >
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconContainer, { backgroundColor: COLORS.accent.info + '20' }]}>
               <MaterialCommunityIcons name="timeline-outline" size={24} color={COLORS.accent.info} />
             </View>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>الجدول الزمني</Text>
           </View>
-          {renderDetailRow("تاريخ الدخول", patient.entryDate, "login-variant")}
-          {renderDetailRow("تاريخ الخروج", patient.dischargeDate, "logout-variant")}
-          {renderDetailRow("المستشفى المحول إليه", patient.assignedHospital, "hospital-building")}
-        </View>
+          {/* تصميم مخصص لصف "تاريخ الدخول" مع gap بين الأيقونة والتاريخ */}
+          <View
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              paddingVertical: getResponsiveValue(SIZES.padding, SIZES.padding * 1.2, SIZES.padding * 1.5),
+              borderBottomWidth: 1,
+              borderBottomColor: 'rgba(0,0,0,0.05)',
+              gap: 14,
+            }}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: COLORS.accent.info + '30' }]}>
+              <MaterialCommunityIcons name="login-variant" size={22} color={COLORS.accent.info} />
+            </View>
+            <View style={{ flex: 1, flexDirection: 'column', alignItems: 'flex-end' }}>
+              <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>تاريخ الدخول</Text>
+              <Text style={[styles.medicalInfoValue, { color: theme.text }]}>{patient.entryDate}</Text>
+            </View>
+          </View>
+          <View
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              paddingVertical: getResponsiveValue(SIZES.padding, SIZES.padding * 1.2, SIZES.padding * 1.5),
+              borderBottomWidth: 1,
+              borderBottomColor: 'rgba(0,0,0,0.05)',
+              gap: 14,
+            }}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: COLORS.accent.info + '30' }]}>
+              <MaterialCommunityIcons name="logout-variant" size={22} color={COLORS.accent.info} />
+            </View>
+            <View style={{ flex: 1, flexDirection: 'column', alignItems: 'flex-end' }}>
+              <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>تاريخ الخروج</Text>
+              <Text style={[styles.medicalInfoValue, { color: theme.text }]}>{patient.dischargeDate}</Text>
+            </View>
+          </View>
+          <View
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              paddingVertical: getResponsiveValue(SIZES.padding, SIZES.padding * 1.2, SIZES.padding * 1.5),
+              gap: 14,
+            }}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: COLORS.accent.info + '30' }]}>
+              <MaterialCommunityIcons name="hospital-building" size={22} color={COLORS.accent.info} />
+            </View>
+            <View style={{ flex: 1, flexDirection: 'column', alignItems: 'flex-end' }}>
+              <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>المستشفى المحول إليه</Text>
+              <Text style={[styles.medicalInfoValue, { color: theme.text }]}>{patient.assignedHospital}</Text>
+            </View>
+          </View>
+        </Animated.View>
 
-        {/* Medical Report with Enhanced Design */}
-        <View style={[styles.sectionCard, { backgroundColor: theme.card }, shadows.medium]}>
+        <Animated.View
+          style={{
+            ...styles.sectionCard,
+            backgroundColor: theme.card,
+            opacity: headerAnim,
+            transform: [
+              {
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [5, 0],
+                }),
+              },
+            ],
+          }}
+        >
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconContainer, { backgroundColor: COLORS.accent.success + '20' }]}>
               <MaterialCommunityIcons name="file-document-outline" size={24} color={COLORS.accent.success} />
             </View>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>التقرير الطبي</Text>
           </View>
-          <View style={[styles.notesContainer, { backgroundColor: theme.backgroundSecondary }]}>
+          <View style={styles.notesContainer}>
             <Text style={[styles.detailedNotes, { color: theme.text }]}>{patient.detailedNotes}</Text>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Enhanced Action Buttons with Responsive Layout */}
-        <View style={[
-          styles.actionButtonsContainer,
-          deviceType === 'tablet' && styles.actionButtonsTablet,
-          isSmallDevice && styles.actionButtonsSmall
-        ]}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.primaryButton, shadows.medium]}
+        <View
+          style={[
+            styles.actionButtonsContainer,
+            deviceType === 'tablet' && styles.actionButtonsTablet,
+            isSmallDevice && styles.actionButtonsSmall,
+          ]}
+        >
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionButton,
+              styles.primaryButton,
+              { opacity: pressed ? 0.85 : 1 },
+            ]}
+            android_ripple={{ color: COLORS.roles.paramedicLight }}
             onPress={() => {
-              // Simple print: open print dialog with report text
-              if (typeof window !== 'undefined' && window.print) {
-                window.print();
-              } else {
-                // For native: show alert as placeholder
-                alert('ميزة الطباعة غير متوفرة حالياً على هذا الجهاز.');
-              }
+              printPatientReport(patient);
             }}
           >
-            <MaterialCommunityIcons 
-              name="printer" 
-              size={getResponsiveValue(18, 20, 22)} 
-              color="white" 
-            />
-            <Text style={[
-              styles.actionButtonText,
-              { fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body) }
-            ]}>
-              طباعة التقرير
+            <Text
+              style={[
+                styles.actionButtonText,
+                { fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body) },
+              ]}
+            >
+              طباعة
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryButton, shadows.medium]}
+              <MaterialCommunityIcons
+                name="printer"
+                size={getResponsiveValue(18, 20, 22)}
+                color="white"
+              />
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionButton,
+              styles.secondaryButton,
+              { opacity: pressed ? 0.85 : 1 },
+            ]}
+            android_ripple={{ color: COLORS.accent.secondary + '55' }}
             onPress={async () => {
-              // Try to use native share if available, otherwise fallback
               try {
                 const reportText = patient?.detailedNotes
                   ? `تقرير المريض: ${patient.detailedNotes}`
                   : 'لا يوجد تقرير متاح.';
-                if ('share' in navigator) {
-                  // Web Share API
-                  await navigator.share({
+                if (typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function') {
+                  await (navigator as any).share({
                     title: 'تقرير المريض',
                     text: reportText,
                   });
+                } else if (
+                  typeof navigator !== 'undefined' &&
+                  typeof (navigator as any).clipboard !== 'undefined'
+                ) {
+                  await (navigator as any).clipboard.writeText(reportText);
+                  alert('تم نسخ التقرير إلى الحافظة!');
                 } else {
-                  // Fallback: copy to clipboard
-                  // Use type assertion to avoid TS error about navigator.clipboard
-                  if (
-                    typeof navigator !== 'undefined' &&
-                    typeof (navigator as any).clipboard !== 'undefined'
-                  ) {
-                    await (navigator as any).clipboard.writeText(reportText);
-                    alert('تم نسخ التقرير إلى الحافظة!');
-                  } else {
-                    alert(reportText);
-                  }
+                  alert(reportText);
                 }
               } catch (e) {
                 alert('تعذر مشاركة التقرير.');
               }
             }}
           >
-            <MaterialCommunityIcons 
-              name="share-variant" 
-              size={getResponsiveValue(18, 20, 22)} 
-              color="white" 
-            />
-            <Text style={[
-              styles.actionButtonText,
-              { fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body) }
-            ]}>
+            <Text
+              style={[
+                styles.actionButtonText,
+                { fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body) },
+              ]}
+            >
               مشاركة
             </Text>
-          </TouchableOpacity>
+              <MaterialCommunityIcons
+                name="share-variant"
+                size={getResponsiveValue(18, 20, 22)}
+                color="white"
+              />
+          </Pressable>
         </View>
-
-        {/* Emergency Contact Button with Responsive Size */}
-        <TouchableOpacity
-          style={[
-            styles.emergencyButton, 
-            { backgroundColor: COLORS.accent.error }, 
-            shadows.large,
-            isSmallDevice && styles.emergencyButtonSmall
+        <Pressable
+          style={({ pressed }) => [
+            styles.emergencyButton,
+            { backgroundColor: COLORS.accent.error, opacity: pressed ? 0.9 : 1 },
+            isSmallDevice && styles.emergencyButtonSmall,
           ]}
-          onPress={() => {
-            // Try to call emergency number
-            const emergencyNumber = '112';
-            if (typeof window !== 'undefined') {
-              // Web: try to open tel: link
-              window.open(`tel:${emergencyNumber}`);
-            } else {
-              // React Native: use Linking API
-              try {
-                // @ts-ignore
-                import('react-native').then(({ Linking }) => {
-                  Linking.openURL(`tel:${emergencyNumber}`);
-                });
-              } catch (e) {
-                alert(`يرجى الاتصال على ${emergencyNumber}`);
-              }
-            }
-          }}
+          android_ripple={{ color: COLORS.accent.error + '33' }}
+          onPress={handleEmergencyCall}
         >
-          <MaterialCommunityIcons 
-            name="phone-outline" 
-            size={getResponsiveValue(20, 24, 28)} 
-            color="white" 
-          />
-          <Text style={[
-            styles.emergencyButtonText,
-            { fontSize: getResponsiveValue(SIZES.body, SIZES.title, SIZES.title + 2) }
-          ]}>
+          <Text
+            style={[
+              styles.emergencyButtonText,
+              { fontSize: getResponsiveValue(SIZES.body, SIZES.title, SIZES.title + 2) },
+            ]}
+          >
             اتصال طارئ
           </Text>
-        </TouchableOpacity>
-
+            <MaterialCommunityIcons
+              name="phone-outline"
+              size={getResponsiveValue(20, 24, 28)}
+              color="white"
+            />
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { 
-    flex: 1 
+  safeArea: {
+    flex: 1,
   },
   containerCenter: {
     flex: 1,
@@ -381,12 +610,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     maxWidth: 300,
+    ...SHADOWS.light.large,
   },
-  scrollContainer: { 
-    paddingBottom: 30 
+  scrollContainer: {
+    paddingBottom: 30,
   },
-  
-  // Enhanced Header Card Styles with Responsive Design
   headerCardContainer: {
     padding: responsivePadding,
     paddingBottom: 0,
@@ -395,6 +623,7 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.radiusLarge,
     padding: getResponsiveValue(SIZES.padding * 1.2, SIZES.padding * 1.8, SIZES.padding * 2),
     overflow: 'hidden',
+    ...SHADOWS.light.large,
   },
   headerContent: {
     flexDirection: 'row',
@@ -411,7 +640,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: SIZES.base,
     textAlign: 'right',
-    fontSize: isSmallDevice ? SIZES.h2 : isLargeDevice ? SIZES.h1 : SIZES.h1 - 2,
+    fontSize: getResponsiveValue(SIZES.h2, SIZES.h1 - 2, SIZES.h1),
   },
   statusContainer: {
     flexDirection: 'row',
@@ -419,16 +648,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     marginBottom: SIZES.base,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: isSmallDevice ? SIZES.padding * 0.8 : SIZES.padding,
+    paddingHorizontal: getResponsiveValue(SIZES.padding * 0.8, SIZES.padding, SIZES.padding * 1.2),
     paddingVertical: SIZES.base,
     borderRadius: SIZES.radiusLarge,
+    ...(Platform.OS === 'web'
+      ? { backdropFilter: 'blur(10px)' }
+      : {}),
   },
   statusText: {
     ...FONTS.body,
     color: 'white',
     fontWeight: '600',
     marginRight: SIZES.base,
-    fontSize: isSmallDevice ? SIZES.bodySmall : SIZES.body,
+    fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body + 1),
   },
   patientId: {
     ...FONTS.caption,
@@ -437,23 +669,22 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   patientAvatar: {
-    width: isSmallDevice ? 60 : isLargeDevice ? 80 : 70,
-    height: isSmallDevice ? 60 : isLargeDevice ? 80 : 70,
-    borderRadius: isSmallDevice ? 30 : isLargeDevice ? 40 : 35,
+    width: getResponsiveValue(60, 70, 80),
+    height: getResponsiveValue(60, 70, 80),
+    borderRadius: getResponsiveValue(30, 35, 40),
     backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.3)',
+    ...SHADOWS.light.medium,
   },
-
-  // Enhanced Quick Stats Styles with Responsive Design
   quickStatsContainer: {
     flexDirection: 'row',
     paddingHorizontal: SIZES.padding,
     marginTop: -30,
     marginBottom: SIZES.padding,
-    gap: isSmallDevice ? SIZES.padding * 0.8 : SIZES.padding,
+    gap: getResponsiveValue(SIZES.padding * 0.8, SIZES.padding, SIZES.padding * 1.5),
   },
   quickStatsTablet: {
     paddingHorizontal: SIZES.padding * 1.5,
@@ -467,24 +698,21 @@ const styles = StyleSheet.create({
   },
   quickStatCard: {
     flex: 1,
-    padding: isSmallDevice ? SIZES.padding : isLargeDevice ? SIZES.padding * 2 : SIZES.padding * 1.5,
+    padding: getResponsiveValue(SIZES.padding, SIZES.padding * 1.5, SIZES.padding * 2),
     borderRadius: SIZES.radiusLarge,
     alignItems: 'center',
-    minHeight: isSmallDevice ? 120 : isLargeDevice ? 160 : 140,
+    minHeight: getResponsiveValue(120, 140, 160),
     justifyContent: 'center',
+    ...SHADOWS.light.medium,
   },
   quickStatIcon: {
-    width: isSmallDevice ? 40 : isLargeDevice ? 60 : 50,
-    height: isSmallDevice ? 40 : isLargeDevice ? 60 : 50,
-    borderRadius: isSmallDevice ? 20 : isLargeDevice ? 30 : 25,
+    width: getResponsiveValue(40, 50, 60),
+    height: getResponsiveValue(40, 50, 60),
+    borderRadius: getResponsiveValue(20, 25, 30),
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SIZES.padding,
-  },
-  quickStatIconSmall: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    ...SHADOWS.light.small,
   },
   quickStatValue: {
     ...FONTS.h3,
@@ -496,41 +724,40 @@ const styles = StyleSheet.create({
     ...FONTS.caption,
     textAlign: 'center',
     fontWeight: '500',
-    fontSize: isSmallDevice ? SIZES.caption - 1 : SIZES.caption,
+    fontSize: getResponsiveValue(SIZES.caption - 1, SIZES.caption, SIZES.caption + 1),
   },
-
-  // Enhanced Section Card Styles with Responsive Design
   sectionCard: {
     marginHorizontal: SIZES.padding,
     marginBottom: SIZES.padding,
     borderRadius: SIZES.radiusLarge,
-    padding: isSmallDevice ? SIZES.padding : isLargeDevice ? SIZES.padding * 2 : SIZES.padding * 1.5,
+    padding: getResponsiveValue(SIZES.padding, SIZES.padding * 1.5, SIZES.padding * 2),
+    ...SHADOWS.light.medium,
   },
   sectionHeader: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: SIZES.padding * 1.2,
+    gap: 10,
     paddingBottom: SIZES.padding,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   sectionIconContainer: {
-    width: isSmallDevice ? 35 : isLargeDevice ? 45 : 40,
-    height: isSmallDevice ? 35 : isLargeDevice ? 45 : 40,
-    borderRadius: isSmallDevice ? 17.5 : isLargeDevice ? 22.5 : 20,
+    width: getResponsiveValue(35, 40, 45),
+    height: getResponsiveValue(35, 40, 45),
+    borderRadius: getResponsiveValue(17.5, 20, 22.5),
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SIZES.padding,
+    ...SHADOWS.light.small,
   },
   sectionTitle: {
     ...FONTS.h3,
     fontWeight: '700',
-    fontSize: isSmallDevice ? SIZES.h4 : isLargeDevice ? SIZES.h2 : SIZES.h3,
+    fontSize: getResponsiveValue(SIZES.h4, SIZES.h3, SIZES.h2),
   },
-
-  // Enhanced Detail Row Styles with Responsive Design
   detailRow: {
-    paddingVertical: isSmallDevice ? SIZES.padding : SIZES.padding * 1.2,
+    paddingVertical: getResponsiveValue(SIZES.padding, SIZES.padding * 1.2, SIZES.padding * 1.5),
     borderBottomWidth: 1,
   },
   detailContent: {
@@ -543,44 +770,43 @@ const styles = StyleSheet.create({
     marginTop: SIZES.base,
   },
   iconContainer: {
-    width: isSmallDevice ? 28 : isLargeDevice ? 36 : 32,
-    height: isSmallDevice ? 28 : isLargeDevice ? 36 : 32,
-    borderRadius: isSmallDevice ? 14 : isLargeDevice ? 18 : 16,
+    width: getResponsiveValue(28, 32, 36),
+    height: getResponsiveValue(28, 32, 36),
+    borderRadius: getResponsiveValue(14, 16, 18),
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SIZES.padding,
+    ...SHADOWS.light.small,
   },
   detailLabel: {
     ...FONTS.caption,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    fontSize: isSmallDevice ? SIZES.caption - 1 : SIZES.caption,
+    fontSize: getResponsiveValue(SIZES.caption - 1, SIZES.caption, SIZES.caption + 1),
   },
   detailValue: {
     ...FONTS.body,
-    fontSize: isSmallDevice ? SIZES.body - 1 : isLargeDevice ? SIZES.body + 2 : 17,
+    fontSize: getResponsiveValue(SIZES.body - 1, SIZES.body, SIZES.body + 2),
     fontWeight: '600',
     textAlign: 'right',
     lineHeight: 24,
   },
-
-  // Enhanced Notes Styles with Responsive Design
   notesContainer: {
-    padding: isSmallDevice ? SIZES.padding : isLargeDevice ? SIZES.padding * 2 : SIZES.padding * 1.5,
+    padding: getResponsiveValue(SIZES.padding, SIZES.padding * 1.5, SIZES.padding * 2),
     borderRadius: SIZES.radius,
     marginTop: SIZES.base,
     borderLeftWidth: 4,
     borderLeftColor: COLORS.accent.success,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    ...SHADOWS.light.small,
   },
   detailedNotes: {
     ...FONTS.body,
     lineHeight: 26,
     textAlign: 'right',
-    fontSize: isSmallDevice ? SIZES.bodySmall : isLargeDevice ? SIZES.body + 1 : SIZES.body,
+    fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body + 1),
   },
-
-  // Enhanced Action Buttons with Responsive Design
   actionButtonsContainer: {
     flexDirection: isSmallDevice ? 'column' : 'row',
     paddingHorizontal: SIZES.padding,
@@ -600,9 +826,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: isSmallDevice ? SIZES.padding : isLargeDevice ? SIZES.padding * 1.5 : SIZES.padding * 1.2,
+    padding: getResponsiveValue(SIZES.padding, SIZES.padding * 1.2, SIZES.padding * 1.5),
     borderRadius: SIZES.radiusLarge,
-    minHeight: isSmallDevice ? 50 : 55,
+    minHeight: getResponsiveValue(50, 55, 60),
+    ...SHADOWS.light.medium,
   },
   primaryButton: {
     backgroundColor: COLORS.roles.paramedic,
@@ -616,17 +843,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginRight: SIZES.base,
   },
-
-  // Emergency Button with Responsive Design
   emergencyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: SIZES.padding,
-    padding: isSmallDevice ? SIZES.padding : isLargeDevice ? SIZES.padding * 2 : SIZES.padding * 1.5,
+    padding: getResponsiveValue(SIZES.padding, SIZES.padding * 1.5, SIZES.padding * 2),
     borderRadius: SIZES.radiusLarge,
     marginBottom: SIZES.padding,
-    minHeight: isSmallDevice ? 55 : isLargeDevice ? 70 : 60,
+    minHeight: getResponsiveValue(55, 60, 70),
+    ...SHADOWS.light.large,
   },
   emergencyButtonSmall: {
     marginHorizontal: SIZES.padding,
@@ -637,22 +863,67 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '700',
     marginRight: SIZES.padding,
+    fontSize: getResponsiveValue(SIZES.body, SIZES.title, SIZES.title + 2),
   },
-
-  // Enhanced Back Button with Responsive Design
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: isSmallDevice ? SIZES.padding * 1.5 : SIZES.padding * 2,
-    paddingVertical: isSmallDevice ? SIZES.padding : SIZES.padding * 1.2,
+    paddingHorizontal: getResponsiveValue(SIZES.padding * 1.5, SIZES.padding * 2, SIZES.padding * 2.5),
+    paddingVertical: getResponsiveValue(SIZES.padding, SIZES.padding * 1.2, SIZES.padding * 1.5),
     borderRadius: SIZES.radiusLarge,
     marginTop: SIZES.padding * 2,
+    ...SHADOWS.light.medium,
   },
   backButtonText: {
     ...FONTS.body,
     color: 'white',
     fontWeight: '600',
     marginRight: SIZES.base,
-    fontSize: isSmallDevice ? SIZES.bodySmall : SIZES.body,
+    fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body + 1),
+  },
+  medicalInfoContainer: {
+    marginTop: SIZES.padding,
+    marginBottom: SIZES.padding,
+    backgroundColor: 'rgba(0,0,0,0.01)',
+    borderRadius: SIZES.radius,
+    padding: getResponsiveValue(SIZES.padding * 0.7, SIZES.padding, SIZES.padding * 1.2),
+  },
+  medicalInfoRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    marginBottom: SIZES.base,
+  },
+  medicalInfoIconContainer: {
+    width: getResponsiveValue(32, 40, 44),
+    height: getResponsiveValue(32, 40, 44),
+    borderRadius: getResponsiveValue(16, 20, 22),
+    backgroundColor: COLORS.roles.paramedicLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: SIZES.padding,
+  },
+  medicalInfoContent: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  medicalInfoLabel: {
+    ...FONTS.caption,
+    fontWeight: '600',
+    marginBottom: 2,
+    fontSize: getResponsiveValue(SIZES.caption - 1, SIZES.caption, SIZES.caption + 1),
+  },
+  medicalInfoValue: {
+    ...FONTS.body,
+    fontWeight: '500',
+    fontSize: getResponsiveValue(SIZES.bodySmall, SIZES.body, SIZES.body + 1),
+    textAlign: 'right',
+  },
+  medicalInfoDivider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.07)',
+    marginVertical: SIZES.base,
+    width: '100%',
+    alignSelf: 'center',
   },
 });
