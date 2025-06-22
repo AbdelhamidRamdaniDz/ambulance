@@ -1,66 +1,47 @@
-import React, { useState, useContext, useMemo } from 'react';
+// (auth)/login.tsx
+import React, { useState, useContext } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  Alert,
-  Pressable,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
-  SafeAreaView,
-  TouchableOpacity,
-  useColorScheme,
-  ScrollView,
-  Image,
+  View, Text, TextInput, StyleSheet, Pressable,
+  ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar,
+  SafeAreaView, Image, ScrollView, useColorScheme
 } from 'react-native';
-import { AuthContext, AuthContextType } from '../../context/AuthContext';
-import { useRouter } from 'expo-router';
+import { AuthContext } from '../../context/AuthContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS, SIZES, FONTS } from '../../constants/theme';
-
-const AppLogo = ({ size }: { size: number }) => (
-  <View style={styles.logoContainer}>
-    <Image
-      source={require('../../assets/images/splash-icon.png')}
-      style={{ width: size, height: size, resizeMode: 'contain' }}
-    />
-  </View>
-);
-
+import { Alert } from 'react-native';
 
 export default function LoginScreen() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const { login, userRole } = useContext(AuthContext) as AuthContextType;
-  const router = useRouter();
-
-  const theme = useMemo(() => ({
-    primaryColor: userRole === 'hospital' ? COLORS.roles.hospital : COLORS.roles.paramedic,
-    icon: userRole === 'hospital' ? '🏥' : '🚑',
-  }), [userRole]);
-  
+  const auth = useContext(AuthContext);
   const colorMode = useColorScheme() || 'light';
   const uiTheme = COLORS[colorMode];
 
   const handleLogin = async () => {
-    if (username.trim() === '' || password.trim() === '') {
-      Alert.alert('خطأ', 'الرجاء إدخال اسم المستخدم وكلمة المرور');
+    if (!auth) return;
+
+    if (!email || !password) {
+      Alert.alert('حقول فارغة', 'الرجاء إدخال البريد الإلكتروني وكلمة المرور.');
       return;
     }
-    if (!userRole) return;
 
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    login(userRole);
+    try {
+      await auth.login(email, password);
+    } catch (error: unknown) {
+  if (error instanceof Error) {
+    Alert.alert('فشل تسجيل الدخول', error.message || 'حدث خطأ ما.');
+  } else {
+    Alert.alert('فشل تسجيل الدخول', 'حدث خطأ غير متوقع.');
+  }
+} finally {
+      setIsLoading(false);
+    }
   };
 
-  if (!userRole) {
+  if (!auth) {
     return <View style={styles.loadingView}><ActivityIndicator size="large" /></View>;
   }
 
@@ -68,30 +49,31 @@ export default function LoginScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: uiTheme.background }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidingContainer}
+        style={{ flex: 1 }}
       >
         <StatusBar barStyle={colorMode === 'dark' ? 'light-content' : 'dark-content'} />
         <ScrollView contentContainerStyle={styles.container}>
-          
-          <AppLogo size={120} />
-          
-          <Text style={[styles.headerTitle, { color: uiTheme.text }]}>
-            تسجيل دخول - {userRole === 'paramedic' ? 'مسعف' : 'مستشفى'} {theme.icon}
-          </Text>
-          
+          <Image
+            source={require('../../assets/images/icon.png')}
+            style={{ width: 100, height: 100, resizeMode: 'contain', marginBottom: 20 }}
+          />
+
+          <Text style={[styles.headerTitle, { color: uiTheme.text }]}>تسجيل دخول - مسعف</Text>
+
           <View style={styles.formContainer}>
             <View style={[styles.inputContainer, { backgroundColor: uiTheme.card }]}>
-              <MaterialCommunityIcons name="account-outline" size={24} color={uiTheme.textSecondary} style={styles.inputIcon} />
+              <MaterialCommunityIcons name="email-outline" size={24} color={uiTheme.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, { color: uiTheme.text }]}
-                placeholder="اسم المستخدم"
-                value={username}
-                onChangeText={setUsername}
+                placeholder="البريد الإلكتروني"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
                 autoCapitalize="none"
                 placeholderTextColor={uiTheme.textSecondary}
               />
             </View>
-            
+
             <View style={[styles.inputContainer, { backgroundColor: uiTheme.card }]}>
               <MaterialCommunityIcons name="lock-outline" size={24} color={uiTheme.textSecondary} style={styles.inputIcon} />
               <TextInput
@@ -107,9 +89,9 @@ export default function LoginScreen() {
             <Pressable
               onPress={handleLogin}
               disabled={isLoading}
-              style={({ pressed }: { pressed: boolean }) => [
+              style={({ pressed }) => [
                 styles.button,
-                { backgroundColor: theme.primaryColor },
+                { backgroundColor: COLORS.roles.paramedic },
                 pressed && styles.buttonPressed,
                 isLoading && styles.buttonLoading,
               ]}
@@ -121,12 +103,6 @@ export default function LoginScreen() {
               )}
             </Pressable>
           </View>
-          
-          <TouchableOpacity onPress={() => router.replace('/select-role')} style={styles.backButton}>
-             <MaterialCommunityIcons name="arrow-left-circle-outline" size={20} color={uiTheme.textSecondary} />
-             <Text style={[styles.backButtonText, { color: uiTheme.textSecondary }]}>تغيير الدور</Text>
-          </TouchableOpacity>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -134,12 +110,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  keyboardAvoidingContainer: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
   container: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -150,10 +121,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: SIZES.padding,
   },
   headerTitle: {
     ...FONTS.h2,
@@ -182,7 +149,7 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     flex: 1,
     height: 55,
-    textAlign: 'right', 
+    textAlign: 'right',
   },
   button: {
     height: 55,
@@ -205,15 +172,5 @@ const styles = StyleSheet.create({
   buttonText: {
     ...FONTS.h3,
     color: '#ffffff',
-  },
-  backButton: {
-    marginTop: SIZES.padding * 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButtonText: {
-    ...FONTS.body,
-    marginLeft: SIZES.base,
-    textDecorationLine: 'underline',
   },
 });

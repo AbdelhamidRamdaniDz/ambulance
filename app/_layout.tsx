@@ -1,41 +1,34 @@
 import React, { useEffect, useContext } from 'react';
-import { Slot, useRouter, useSegments, SplashScreen } from 'expo-router';
+import { Slot, useRouter, SplashScreen } from 'expo-router';
 import { AuthContext, AuthProvider, AuthContextType } from '../context/AuthContext';
 
+// منع شاشة البداية من الاختفاء التلقائي
 SplashScreen.preventAutoHideAsync();
 
 function InitialLayout() {
-  const { isAuthenticated, userRole, isLoading } = useContext(AuthContext) as AuthContextType;
-  const segments = useSegments();
+  const auth = useContext(AuthContext) as AuthContextType;
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) {
+    // لا تفعل شيئًا حتى يتم تحميل حالة المصادقة
+    if (auth.isLoading) {
       return;
     }
 
+    // الآن بعد أن انتهى التحميل، قم بإخفاء شاشة البداية
     SplashScreen.hideAsync();
 
-    const inAuthGroup = segments[0] === '(auth)';
-
-    if (isAuthenticated) {
-
-      if (inAuthGroup) {
-        if (userRole === 'paramedic') {
-          router.replace('/paramedic-dashboard'); 
-        } else if (userRole === 'hospital') {
-          router.replace('/hospital-dashboard');
-        }
-      }
+    // اتخاذ قرار التوجيه بناءً على حالة تسجيل الدخول فقط
+    if (auth.isAuthenticated) {
+      // إذا كان المستخدم مسجلاً دخوله، اذهب مباشرة إلى لوحة التحكم
+      router.replace('/(tabs)/paramedic-dashboard');
     } else {
-
-      if (!inAuthGroup) {
-        router.replace(userRole ? '/login' : '/select-role');
-      }
+      // إذا لم يكن مسجلاً دخوله، اذهب إلى صفحة تسجيل الدخول
+      router.replace('/(auth)/login');
     }
-  }, [isAuthenticated, userRole, isLoading, segments]);
+  }, [auth.isLoading, auth.isAuthenticated]);
 
-
+  // عرض الشاشة الحالية التي تم التوجيه إليها
   return <Slot />;
 }
 

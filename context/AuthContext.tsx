@@ -1,80 +1,92 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 
-type UserRole = 'paramedic' | 'hospital';
+// --- ⚠️ استبدل هذا الرابط بعنوان IP المحلي الخاص بحاسوبك ---
+const API_URL = 'https://3510-129-45-33-55.ngrok-free.app/api/auth'; 
 
 export interface AuthContextType {
-  userRole: UserRole | null;
+  authToken: string | null;
+  user: any | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  setRole: (role: UserRole) => Promise<void>;
-  login: (role: UserRole) => void;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
-export const AuthContext = createContext<AuthContextType>({
-  userRole: null,
-  isAuthenticated: false,
-  isLoading: true,
-  setRole: async () => {},
-  login: () => {},
-  logout: async () => {},
-});
+export const AuthContext = createContext<AuthContextType | null>(null);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    const checkRoleAndAuth = async () => {
+    const loadAuthData = async () => {
       try {
-        const role = await AsyncStorage.getItem('userRole') as UserRole | null;
-        if (role) {
-          setUserRole(role);
+        const storedToken = await AsyncStorage.getItem('authToken');
+        const storedUser = await AsyncStorage.getItem('user');
+
+        if (storedToken && storedUser) {
+          setAuthToken(storedToken);
+          setUser(JSON.parse(storedUser));
+          setIsAuthenticated(true);
         }
       } catch (e) {
-        console.error("Failed to load user role.", e);
+        console.error("Failed to load auth data.", e);
       } finally {
         setIsLoading(false);
       }
     };
-
-    checkRoleAndAuth();
+    loadAuthData();
   }, []);
 
-  const login = (role: UserRole) => {
-    setIsAuthenticated(true);
-  };
-
-  const setRole = async (role: UserRole) => {
+  const login = async (email, password) => {
+    setIsLoading(true);
     try {
-        await AsyncStorage.setItem('userRole', role);
-        setUserRole(role);
-        router.replace('/login');
-    } catch (e) {
-        console.error("Failed to set user role.", e);
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // إرسال دور المسعف بشكل ثابت
+        body: JSON.stringify({ email, password, role: 'paramedic' }), 
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      if (!data.user || !data.token) {
+        throw new Error('User data or token is missing from API response');
+      }
+
+      await AsyncStorage.setItem('authToken', data.token);
+      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+
+      setAuthToken(data.token);
+      setUser(data.user);
+      setIsAuthenticated(true);
+
+    } catch (error) {
+        console.error("Login API error:", error);
+        throw error;
+    } finally {
+        setIsLoading(false);
     }
   };
   
   const logout = async () => {
-      try {
-        await AsyncStorage.removeItem('userRole');
-        setIsAuthenticated(false);
-        setUserRole(null);
-        router.replace('/select-role');
-      } catch(e) {
-        console.error("Failed to logout.", e)
-      }
+      await AsyncStorage.multiRemove(['authToken', 'user']);
+      setAuthToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ userRole, isAuthenticated, isLoading, setRole, login, logout }}>
+    <AuthContext.Provider value={{ authToken, user, isAuthenticated, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
