@@ -1,221 +1,253 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, ScrollView, SafeAreaView,
-  TouchableOpacity, Alert, useColorScheme, ActivityIndicator,
-  KeyboardAvoidingView, Platform
+    View, Text, TextInput, StyleSheet, ScrollView, SafeAreaView,
+    TouchableOpacity, Alert, useColorScheme, ActivityIndicator,
+    KeyboardAvoidingView, Platform
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { AuthContext, AuthContextType } from '../../context/AuthContext';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { COLORS, SIZES, FONTS, SHADOWS } from '../../constants/theme';
+import API from '../../lib/axios';
 
-const API_BASE_URL = 'https://3510-129-45-33-55.ngrok-free.app/api'; 
-
+// --- واجهات البيانات ---
+interface BedStatus {
+    total: number;
+    occupied: number;
+}
+interface HospitalStatus {
+    _id: string;
+    name: string;
+    isERAvailable: boolean;
+    availableBeds?: Record<string, BedStatus>;
+}
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 
+// --- المكون الرئيسي ---
 export default function AddCaseScreen() {
-  const router = useRouter();
-  const colorScheme = useColorScheme() || 'light';
-  const theme = COLORS[colorScheme];
-  const shadow = SHADOWS[colorScheme];
-  const auth = useContext(AuthContext) as AuthContextType;
-  
-  const params = useLocalSearchParams<{ hospitalId?: string, hospitalName?: string }>();
+    const router = useRouter();
+    const colorScheme = useColorScheme() || 'light';
+    const theme = COLORS[colorScheme];
+    const auth = useContext(AuthContext) as AuthContextType;
+    const params = useLocalSearchParams<{ hospitalId?: string, hospitalName?: string }>();
 
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    medicalHistory: '',
-    currentNeeds: '',
-    bloodType: '',
-    assignedHospital: params.hospitalId || '',
-  });
-  
-  const [hospitals, setHospitals] = useState<{ label: string, value: string }[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+    // --- متغيرات الحالة ---
+    const [hospitals, setHospitals] = useState<HospitalStatus[]>([]);
+    const [selectedHospital, setSelectedHospital] = useState<HospitalStatus | null>(null);
+    const [showPatientForm, setShowPatientForm] = useState(false);
+    const [formData, setFormData] = useState({
+        firstName: '',
+        lastName: '',
+        medicalHistory: '',
+        currentNeeds: '',
+        bloodType: '',
+    });
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-      // جلب قائمة المستشفيات المتاحة عند تحميل الشاشة
-      const fetchHospitals = async () => {
-          if (!auth.authToken) return;
-          try {
-              const response = await fetch(`${API_BASE_URL}/hospitals/status`, {
-                  headers: { 'Authorization': `Bearer ${auth.authToken}` }
-              });
-              const data = await response.json();
-              if (data.success) {
-                  const availableHospitals = data.data
-                      .filter(h => h.isERAvailable)
-                      .map(h => ({ label: h.hospital.name, value: h.hospital._id }));
-                  setHospitals(availableHospitals);
-              }
-          } catch (error) {
-              console.error("Failed to fetch hospitals:", error);
-          }
-      };
-      fetchHospitals();
-  }, [auth.authToken]);
+    // --- جلب بيانات المستشفيات ---
+    useEffect(() => {
+        const fetchHospitals = async () => {
+            if (!auth.authToken) {
+                setIsLoading(false);
+                return;
+            }
+            try {
+                const response = await API.get('/paramedic/hospital-statuses', {
+                    headers: { 'Authorization': `Bearer ${auth.authToken}` }
+                });
+                if (response.data.success) {
+                    const hospitalData = response.data.data.map((item: any) => ({
+                        _id: item.hospital._id,
+                        name: item.hospital.name,
+                        isERAvailable: item.isERAvailable,
+                        availableBeds: item.availableBeds
+                    }));
+                    setHospitals(hospitalData);
+                    if (params.hospitalId) {
+                        const preSelected = hospitalData.find(h => h._id === params.hospitalId);
+                        if (preSelected) {
+                            setSelectedHospital(preSelected);
+                            setShowPatientForm(true);
+                        }
+                    }
+                }
+            } catch (error) {
+                Alert.alert("خطأ", "فشل في تحميل بيانات المستشفيات.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchHospitals();
+    }, [auth.authToken, params.hospitalId]);
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSubmit = async () => {
-    if (!formData.firstName || !formData.currentNeeds || !formData.assignedHospital) {
-      Alert.alert('حقول مطلوبة', 'يرجى إدخال اسم المريض، احتياجاته الحالية، واختيار المستشفى.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    const caseData = {
-      patientInfo: {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        bloodType: formData.bloodType,
-        medicalHistory: formData.medicalHistory,
-        currentNeeds: formData.currentNeeds,
-      },
-      assignedHospital: formData.assignedHospital,
+    const handleHospitalSelect = (hospitalId: string) => {
+        const hospital = hospitals.find(h => h._id === hospitalId);
+        setSelectedHospital(hospital || null);
+        setShowPatientForm(false);
     };
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/patients`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth.authToken}`
-        },
-        body: JSON.stringify(caseData),
-      });
+    const handleInputChange = (field: string, value: string) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
 
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to create case');
-      }
+    const handleSubmit = async () => {
+        if (!formData.firstName || !formData.currentNeeds || !selectedHospital) {
+            Alert.alert('حقول مطلوبة', 'يرجى إدخال اسم المريض، احتياجاته الحالية، واختيار المستشفى.');
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            // ✅ تم التعديل هنا: إرسال كائن مسطح يتوافق مع الخادم
+            const caseData = {
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                bloodType: formData.bloodType,
+                // ملاحظة: الخادم يتوقع كائنًا للتاريخ الطبي، سنقوم بتبسيطه الآن
+                medicalHistory: { allergies: [formData.medicalHistory] }, 
+                currentCondition: formData.currentNeeds, // تصحيح اسم الحقل
+                assignedHospital: selectedHospital._id,
+            };
 
-      Alert.alert('نجاح', 'تم إرسال الحالة بنجاح.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+            const response = await API.post('/patients', caseData, {
+                 headers: { 'Authorization': `Bearer ${auth.authToken}` }
+            });
 
-    } catch (error) {
-      Alert.alert('خطأ في الإرسال', error.message);
-    } finally {
-      setIsLoading(false);
+            if (response.data.success) {
+                Alert.alert('نجاح', 'تم إرسال الحالة بنجاح.', [{ text: 'OK', onPress: () => router.back() }]);
+            } else {
+                throw new Error(response.data.message || 'فشل في إنشاء الحالة');
+            }
+        } catch (error: any) {
+            Alert.alert('خطأ في الإرسال', error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (isLoading) {
+       return <View style={styles.centered}><ActivityIndicator size="large" color={COLORS.primary}/></View>
     }
-  };
 
-  return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      <Stack.Screen
-        options={{
-          title: 'إضافة حالة جديدة',
-          headerStyle: { backgroundColor: theme.card },
-          headerTitleStyle: { color: theme.text, ...FONTS.title },
-          headerTintColor: theme.text,
-        }}
-      />
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"} 
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-            
-            <View style={[styles.section, { backgroundColor: theme.card, ...shadow.small }]}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>المستشفى المعين</Text>
-              <View style={[styles.pickerWrapper, {borderColor: theme.border}]}>
-                  <Picker 
-                    selectedValue={formData.assignedHospital} 
-                    onValueChange={(val) => handleInputChange('assignedHospital', val)} 
-                    style={{color: theme.text}}
-                    enabled={!params.hospitalId} // تعطيل الاختيار إذا تم تمريره من الخريطة
-                  >
-                      <Picker.Item label={params.hospitalName || "اختر مستشفى متاح..."} value={params.hospitalId || ""} />
-                      {hospitals.map(h => <Picker.Item key={h.value} label={h.label} value={h.value} />)}
-                  </Picker>
-              </View>
-            </View>
+    return (
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+            <Stack.Screen options={{ title: 'إنشاء حالة جديدة', headerStyle: { backgroundColor: theme.card }, headerTitleStyle: { color: theme.text, ...FONTS.title }, headerTintColor: theme.text }} />
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                    <View style={[styles.section, { backgroundColor: theme.card, ...SHADOWS[colorScheme].small }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text }]}>1. اختيار المستشفى</Text>
+                        <View style={[styles.pickerWrapper, { borderColor: theme.border }]}>
+                            <Picker selectedValue={selectedHospital?._id} onValueChange={(val) => handleHospitalSelect(val)} style={{ color: theme.text }}>
+                                <Picker.Item label="-- اختر مستشفى متاح --" value="" />
+                                {hospitals.filter(h => h.isERAvailable).map(h => <Picker.Item key={h._id} label={h.name} value={h._id} />)}
+                            </Picker>
+                        </View>
+                    </View>
 
-            <View style={[styles.section, { backgroundColor: theme.card, ...shadow.small }]}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>معلومات المريض</Text>
-              <TextInput style={[styles.input, {color: theme.text, borderColor: theme.border}]} placeholder="الاسم الأول" onChangeText={val => handleInputChange('firstName', val)} />
-              <TextInput style={[styles.input, {color: theme.text, borderColor: theme.border}]} placeholder="اسم العائلة" onChangeText={val => handleInputChange('lastName', val)} />
-            </View>
+                    {selectedHospital && (
+                        <HospitalStatusCard 
+                            hospital={selectedHospital} 
+                            theme={theme} 
+                            shadow={SHADOWS[colorScheme]} 
+                            showPatientForm={showPatientForm}
+                            onConfirm={() => setShowPatientForm(true)} 
+                        />
+                    )}
 
-            <View style={[styles.section, { backgroundColor: theme.card, ...shadow.small }]}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>التفاصيل الطبية</Text>
-                <View style={[styles.pickerWrapper, {borderColor: theme.border}]}>
-                    <Picker selectedValue={formData.bloodType} onValueChange={val => handleInputChange('bloodType', val)} style={{color: theme.text}}>
-                        <Picker.Item label="اختر فصيلة الدم..." value="" />
-                        {BLOOD_TYPES.map(type => <Picker.Item key={type} label={type} value={type} />)}
-                    </Picker>
-                </View>
-                <TextInput style={[styles.textArea, {color: theme.text, borderColor: theme.border}]} placeholder="الاحتياجات الحالية (مثال: بحاجة لتدخل جراحي عاجل...)" onChangeText={val => handleInputChange('currentNeeds', val)} multiline/>
-                <TextInput style={[styles.textArea, {color: theme.text, borderColor: theme.border}]} placeholder="التاريخ الطبي (مثال: حساسية بنسلين...)" onChangeText={val => handleInputChange('medicalHistory', val)} multiline/>
-            </View>
-            
-            <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: COLORS.roles.paramedic }, isLoading && styles.submitButtonDisabled, shadow.medium]}
-              onPress={handleSubmit}
-              disabled={isLoading}
-            >
-              {isLoading ? <ActivityIndicator color="#ffffff" /> : (
-                  <>
-                    <MaterialCommunityIcons name="send" size={SIZES.icon.medium} color="white" />
-                    <Text style={styles.submitButtonText}>تأكيد وإرسال الحالة</Text>
-                  </>
-              )}
-            </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+                    {showPatientForm && (
+                        <View style={styles.patientFormContainer}>
+                            <View style={[styles.section, { backgroundColor: theme.card, ...SHADOWS[colorScheme].small }]}>
+                                <Text style={[styles.sectionTitle, { color: theme.text }]}>2. معلومات المريض</Text>
+                                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="الاسم الأول" onChangeText={val => handleInputChange('firstName', val)} />
+                                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} placeholder="اسم العائلة" onChangeText={val => handleInputChange('lastName', val)} />
+                            </View>
+                            <View style={[styles.section, { backgroundColor: theme.card, ...SHADOWS[colorScheme].small }]}>
+                                <Text style={[styles.sectionTitle, { color: theme.text }]}>3. التفاصيل الطبية</Text>
+                                <View style={[styles.pickerWrapper, {borderColor: theme.border}]}>
+                                    <Picker selectedValue={formData.bloodType} onValueChange={val => handleInputChange('bloodType', val)} style={{color: theme.text}}>
+                                        <Picker.Item label="اختر فصيلة الدم..." value="" />
+                                        {BLOOD_TYPES.map(type => <Picker.Item key={type} label={type} value={type} />)}
+                                    </Picker>
+                                </View>
+                                <TextInput style={[styles.textArea, {color: theme.text, borderColor: theme.border}]} placeholder="الاحتياجات الحالية (مثال: بحاجة لتدخل جراحي عاجل...)" onChangeText={val => handleInputChange('currentNeeds', val)} multiline/>
+                                <TextInput style={[styles.textArea, {color: theme.text, borderColor: theme.border}]} placeholder="التاريخ الطبي (مثال: حساسية بنسلين...)" onChangeText={val => handleInputChange('medicalHistory', val)} multiline/>
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.submitButton, { backgroundColor: COLORS.roles.paramedic }, isSubmitting && styles.submitButtonDisabled, SHADOWS[colorScheme].medium]}
+                                onPress={handleSubmit}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <><MaterialCommunityIcons name="send" size={SIZES.icon.medium} color="white" /><Text style={styles.submitButtonText}>تأكيد وإرسال الحالة</Text></>}
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
+    );
 }
 
+// ... (المكونات المساعدة تبقى كما هي)
+const HospitalStatusCard = ({ hospital, theme, shadow, onConfirm, showPatientForm }: any) => (
+    <View style={[styles.section, styles.statusCard, { backgroundColor: theme.card, ...shadow.small }]}>
+        <View style={styles.statusHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>{hospital.name}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: hospital.isERAvailable ? `${COLORS.status.available}20` : `${COLORS.status.unavailable}20`}]}>
+                <View style={[styles.statusDot, { backgroundColor: hospital.isERAvailable ? COLORS.status.available : COLORS.status.unavailable }]} />
+                <Text style={[styles.statusText, {color: hospital.isERAvailable ? COLORS.status.available : COLORS.status.unavailable}]}>{hospital.isERAvailable ? 'الطوارئ متاحة' : 'الطوارئ غير متاحة'}</Text>
+            </View>
+        </View>
+        <View style={styles.bedsContainer}>
+            <BedInfo label="عناية مركزة" status={hospital.availableBeds?.['العناية المركزة (ICU)']} theme={theme} />
+            <BedInfo label="طوارئ" status={hospital.availableBeds?.['الطوارئ (Emergency)']} theme={theme} />
+        </View>
+        {!showPatientForm && (
+            <TouchableOpacity style={[styles.confirmButton, {backgroundColor: COLORS.primary}]} onPress={onConfirm}>
+                <Text style={styles.submitButtonText}>متابعة لملء بيانات المريض</Text>
+                <MaterialCommunityIcons name="arrow-left-circle-outline" size={22} color="white" />
+            </TouchableOpacity>
+        )}
+    </View>
+);
+
+const BedInfo = ({ label, status, theme }: { label: string, status?: BedStatus, theme: any }) => {
+    if (!status) return <View style={styles.bedInfoBox}><Text style={[styles.bedLabel, {color: theme.textSecondary}]}>{label}: غير محدد</Text></View>;
+    const available = status.total - status.occupied;
+    return (
+        <View style={[styles.bedInfoBox, {backgroundColor: `${COLORS.primary}10`}]}>
+            <Text style={[styles.bedLabel, {color: COLORS.primary}]}>{label}</Text>
+            <View style={{flexDirection: 'row-reverse', alignItems: 'baseline', gap: 4}}>
+                <Text style={[styles.bedCount, {color: theme.text}]}>{available}</Text>
+                <Text style={[styles.bedTotal, {color: theme.textSecondary}]}>/ {status.total} سرير</Text>
+            </View>
+        </View>
+    )
+};
+
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  scrollContent: { padding: SIZES.padding },
-  section: {
-    marginBottom: SIZES.large,
-    borderRadius: SIZES.radiusLarge,
-    padding: SIZES.padding,
-  },
-  sectionTitle: { ...FONTS.h4, marginBottom: SIZES.medium, textAlign: 'right' },
-  input: { 
-    ...FONTS.body, 
-    height: 55, 
-    paddingHorizontal: SIZES.medium,
-    borderRadius: SIZES.radius,
-    borderWidth: 1,
-    textAlign: 'right',
-    marginBottom: SIZES.medium,
-  },
-  textArea: {
-    ...FONTS.body, 
-    height: 110, 
-    padding: SIZES.medium,
-    borderRadius: SIZES.radius,
-    borderWidth: 1,
-    textAlign: 'right',
-    textAlignVertical: 'top',
-    marginBottom: SIZES.medium,
-  },
-  pickerWrapper: { 
-    borderRadius: SIZES.radius, 
-    borderWidth: 1,
-    marginBottom: SIZES.medium,
-    justifyContent: 'center',
-  },
-  submitButton: { 
-    flexDirection: 'row-reverse',
-    justifyContent: 'center', 
-    alignItems: 'center',
-    gap: SIZES.small,
-    padding: SIZES.padding, 
-    borderRadius: SIZES.radiusLarge, 
-    marginTop: SIZES.base,
-  },
-  submitButtonDisabled: { opacity: 0.7 },
-  submitButtonText: { ...FONTS.button, color: 'white' },
+    safeArea: { flex: 1 },
+    scrollContent: { padding: SIZES.padding },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    section: { marginBottom: SIZES.large, borderRadius: SIZES.radiusLarge, padding: SIZES.padding },
+    sectionTitle: { ...FONTS.h4, marginBottom: SIZES.medium, textAlign: 'right' },
+    pickerWrapper: { borderRadius: SIZES.radius, borderWidth: 1, marginBottom: SIZES.medium, justifyContent: 'center' },
+    input: { ...FONTS.body, height: 55, paddingHorizontal: SIZES.medium, borderRadius: SIZES.radius, borderWidth: 1, textAlign: 'right', marginBottom: SIZES.medium },
+    textArea: { ...FONTS.body, height: 110, padding: SIZES.medium, borderRadius: SIZES.radius, borderWidth: 1, textAlign: 'right', textAlignVertical: 'top', marginBottom: SIZES.medium },
+    statusCard: { padding: SIZES.padding, marginVertical: SIZES.base },
+    statusHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: SIZES.medium },
+    statusBadge: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+    statusDot: { width: 10, height: 10, borderRadius: 5, marginLeft: 6 },
+    statusText: { ...FONTS.body, fontWeight: 'bold' },
+    bedsContainer: { flexDirection: 'row-reverse', justifyContent: 'space-around', gap: SIZES.medium, marginBottom: SIZES.padding },
+    bedInfoBox: { flex: 1, padding: SIZES.medium, borderRadius: SIZES.radius, alignItems: 'center' },
+    bedLabel: { ...FONTS.body, fontSize: SIZES.small, marginBottom: 4 },
+    bedCount: { ...FONTS.h3 },
+    bedTotal: { ...FONTS.body, fontSize: 10 },
+    confirmButton: { flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: SIZES.small, padding: SIZES.padding, borderRadius: SIZES.radius },
+    patientFormContainer: { marginTop: SIZES.large, borderTopWidth: 1, borderColor: '#eee', paddingTop: SIZES.large },
+    submitButton: { flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: SIZES.small, padding: SIZES.padding, borderRadius: SIZES.radiusLarge, marginTop: SIZES.base },
+    submitButtonDisabled: { opacity: 0.7 },
+    submitButtonText: { ...FONTS.button, color: 'white' },
 });
