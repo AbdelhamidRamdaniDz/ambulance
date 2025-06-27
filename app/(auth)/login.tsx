@@ -1,4 +1,3 @@
-// (auth)/login.tsx
 import React, { useState, useContext } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable,

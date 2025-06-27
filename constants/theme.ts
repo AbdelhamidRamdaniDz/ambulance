@@ -75,6 +75,9 @@ export const SIZES = {
   xlarge: 32,
   
   padding: 16,
+  paddingSmall: 8,
+  paddingMedium: 16,
+  paddingLarge: 24,
   paddingHorizontal: 20,
   paddingVertical: 16,
   margin: 16,
@@ -120,6 +123,41 @@ export const SIZES = {
 
 // تحسين الخطوط
 export const FONTS = {
+  // Font sizes
+  sizes: {
+    tiny: 10,
+    small: 12,
+    medium: 14,
+    large: 18,
+    xlarge: 24,
+    h1: 32,
+    h2: 28,
+    h3: 24,
+    h4: 20,
+    title: 18,
+    body: 16,
+    bodySmall: 14,
+    caption: 12,
+  },
+
+  // Font families
+  families: {
+    regular: 'System',
+    medium: 'System',
+    bold: 'System',
+    light: 'System',
+  },
+
+  // Font weights
+  weights: {
+    light: '300',
+    regular: '400',
+    medium: '500',
+    semiBold: '600',
+    bold: '700',
+  },
+
+  // Predefined font styles
   h1: { 
     fontFamily: 'System', 
     fontSize: SIZES.h1, 

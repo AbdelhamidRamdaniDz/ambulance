@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import API from '../lib/axios';
+import axios from 'axios';
 
 export interface AuthContextType {
     authToken: string | null;
@@ -41,23 +42,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loadAuthData();
     }, []);
 
-    const login = async (email, password) => {
+    const login = async (email: string, password: string) => {
         setIsLoading(true);
         try {
             const res = await API.post('/auth/login', { 
                 email, 
                 password, 
-                role: 'paramedic' // إرسال دور المسعف بشكل ثابت
+                role: 'paramedic'
             });
 
             const data = res.data;
 
             if (!data.success) {
-                // ✅ تم التعديل: قراءة رسالة الخطأ من data.message
                 throw new Error(data.message || 'Login failed');
             }
 
-            // ✅ تم التعديل: قراءة المستخدم من data.data
             const userData = data.data;
             const token = data.token;
 
@@ -74,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         } catch (error) {
             console.error("Login API error:", error);
-            throw error; // إرسال الخطأ ليتم عرضه في صفحة تسجيل الدخول
+            throw error;
         } finally {
             setIsLoading(false);
         }
@@ -82,17 +81,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     const logout = async () => {
         try {
-            // ✅ تم التعديل: استدعاء مسار الخادم لتسجيل الخروج
             await API.get('/auth/logout');
         } catch (error) {
             console.error("Failed to logout on server, proceeding with client-side logout.", error);
         } finally {
-            // مسح البيانات من التطبيق بغض النظر عن استجابة الخادم
             await AsyncStorage.multiRemove(['authToken', 'user']);
             setAuthToken(null);
             setUser(null);
             setIsAuthenticated(false);
-            // توجيه المستخدم إلى صفحة تسجيل الدخول
             router.replace('/(auth)/login');
         }
     };
